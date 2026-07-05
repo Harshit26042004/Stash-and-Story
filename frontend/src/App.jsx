@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, Navigate } from 'react-router-dom';
-import { 
-  LayoutDashboard, Receipt, LogOut, TrendingUp, Edit2, Check, 
+import {
+  LayoutDashboard, Receipt, LogOut, TrendingUp, Edit2, Check,
   X, Trash2, Plus, Calendar, List, ChevronRight, PieChart as PieIcon, Settings2
 } from 'lucide-react';
-import { 
-  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, 
+import {
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   Cell, CartesianGrid, PieChart, Pie, Legend,
   Sector
 } from 'recharts';
@@ -101,7 +101,7 @@ const CustomBarTooltip = ({ active, payload, label }) => {
 
   return (
     <div className="bg-white border border-slate-200 shadow-xl rounded-2xl p-4 min-w-[220px]">
-      
+
       <p className="text-xs font-black uppercase text-slate-900 mb-3">
         {label}
       </p>
@@ -154,7 +154,7 @@ const Dashboard = () => {
       try {
         const [sRes, eRes] = await Promise.all([
           api.get(`/stash/expenses/dashboard_data/?period=${period}`),
-          api.get('/stash/expenses/')
+          api.get('/stash/expenses/all_expenses/')
         ]);
         setStats(sRes.data);
         setExpenses(eRes.data);
@@ -167,7 +167,7 @@ const Dashboard = () => {
   const { groupedData, allKeys } = useMemo(() => {
     const groups = {};
     const keys = new Set();
-    
+
     stats.forEach(item => {
       const date = item.time_period;
       if (!groups[date]) groups[date] = { time_period: date };
@@ -253,9 +253,9 @@ const Dashboard = () => {
           <div className="flex items-center bg-slate-50 border border-slate-200 px-3 py-1 rounded-xl gap-2">
             <Settings2 size={14} className="text-slate-400" />
             <span className="text-[10px] font-black text-slate-400 uppercase">Limit:</span>
-            <input 
-              type="number" 
-              value={limit} 
+            <input
+              type="number"
+              value={limit}
               min="1"
               max="52"
               onChange={(e) => setLimit(parseInt(e.target.value) || 1)}
@@ -267,8 +267,8 @@ const Dashboard = () => {
             {['week', 'month', 'quarter', 'year'].map((p) => (
               <button key={p} onClick={() => {setPeriod(p); setActiveCategory(null);}}
                 className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${
-                  period === p 
-                  ? 'bg-white text-blue-600 shadow-sm border border-slate-200' 
+                  period === p
+                  ? 'bg-white text-blue-600 shadow-sm border border-slate-200'
                   : 'text-slate-400 hover:text-slate-600'
                 }`}>
                 {p}
@@ -423,6 +423,12 @@ const ExpenseManager = () => {
   const [expenses, setExpenses] = useState([]);
   const [editingId, setEditingId] = useState(null);
 
+  // Pagination
+  const [page, setPage] = useState(1);
+  const [count, setCount] = useState(0);
+  const [next, setNext] = useState(null);
+  const [previous, setPrevious] = useState(null);
+
   // EDIT FORM
   const [editForm, setEditForm] = useState(emptyForm);
 
@@ -431,13 +437,22 @@ const ExpenseManager = () => {
 
   const [showAdd, setShowAdd] = useState(false);
 
-  const fetchData = async () => {
-    const res = await api.get('/stash/expenses/');
-    setExpenses(res.data);
+  const fetchData = async (pageNumber = 1) => {
+    try {
+      const res = await api.get(`/stash/expenses/?page=${pageNumber}`);
+
+      setExpenses(res.data.results);
+      setCount(res.data.count);
+      setNext(res.data.next);
+      setPrevious(res.data.previous);
+      setPage(pageNumber);
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   useEffect(() => {
-    fetchData();
+    fetchData(1);
   }, []);
 
   const handleSave = async (id) => {
@@ -446,7 +461,7 @@ const ExpenseManager = () => {
     setEditingId(null);
     setEditForm(emptyForm);
 
-    fetchData();
+    fetchData(page);
   };
 
   const handleAdd = async (e) => {
@@ -458,7 +473,7 @@ const ExpenseManager = () => {
       setAddForm(emptyForm);
       setShowAdd(false);
 
-      fetchData();
+      fetchData(page);
     } catch (err) {
       console.error(err);
       alert("Failed to add expense");
@@ -694,7 +709,11 @@ const ExpenseManager = () => {
                     onClick={async () => {
                       if (window.confirm("Delete?")) {
                         await api.delete(`/stash/expenses/${e.id}/`);
-                        fetchData();
+                        if (expenses.length === 1 && page > 1) {
+                            fetchData(page - 1);
+                          } else {
+                            fetchData(page);
+                          }
                       }
                     }}
                     className="text-red-500 bg-red-50 p-2 rounded-xl"
@@ -708,6 +727,45 @@ const ExpenseManager = () => {
             ))}
           </tbody>
         </table>
+        <div className="flex items-center justify-between px-8 py-6 border-t border-slate-100">
+
+        <div className="text-sm text-slate-500 font-semibold">
+          Total Expenses: {count}
+        </div>
+
+        <div className="flex items-center gap-3">
+
+          <button
+            disabled={!previous}
+            onClick={() => fetchData(page - 1)}
+            className={`px-4 py-2 rounded-xl font-bold transition ${
+              previous
+                ? "bg-slate-900 text-white hover:bg-slate-700"
+                : "bg-slate-100 text-slate-400 cursor-not-allowed"
+            }`}
+          >
+            Previous
+          </button>
+
+          <span className="font-bold text-slate-700">
+            Page {page}
+          </span>
+
+          <button
+            disabled={!next}
+            onClick={() => fetchData(page + 1)}
+            className={`px-4 py-2 rounded-xl font-bold transition ${
+              next
+                ? "bg-slate-900 text-white hover:bg-slate-700"
+                : "bg-slate-100 text-slate-400 cursor-not-allowed"
+            }`}
+          >
+            Next
+          </button>
+
+        </div>
+
+      </div>
       </div>
     </div>
   );
@@ -728,7 +786,7 @@ export default function App() {
             </div>
             <h1 className="font-black text-xl tracking-tighter uppercase leading-none">Stash <br/><span className="text-blue-500">Analytics</span></h1>
           </div>
-          
+
           <nav className="flex-1 space-y-4">
             <Link to="/" className="flex items-center space-x-4 p-5 rounded-[1.5rem] hover:bg-slate-900 transition-all group">
               <LayoutDashboard className="text-slate-600 group-hover:text-blue-500 transition-colors" size={20}/>
@@ -739,7 +797,7 @@ export default function App() {
               <span className="font-bold text-sm tracking-tight">Financial Vault</span>
             </Link>
           </nav>
-          
+
           <div className="mt-auto pt-8 border-t border-slate-900">
             <button onClick={() => { localStorage.clear(); window.location.reload(); }} className="flex items-center space-x-4 p-5 rounded-[1.5rem] text-red-400 hover:bg-red-400/10 font-black uppercase text-[10px] tracking-widest w-full transition-all">
                 <LogOut size={18}/><span>Logoff Session</span>
